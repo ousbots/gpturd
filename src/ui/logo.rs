@@ -7,8 +7,8 @@ use ratatui::{
 };
 use std::iter::zip;
 
-const LOGO_TOP: &str = "▄▀▀  █▀▀▄ ▀█▀ █  █ █▀▀▄ █▀▀▄";
-const LOGO_BOT: &str = "▀▄▄▀ █▀▀   █  ▀▄▄▀ █▀▀▄ █▄▄▀";
+const LOGO_TOP: &str = "▄▀▀▀ █▀▀▄ ▀█▀ █  █ █▀▀▄ █▀▀▄";
+const LOGO_BOT: &str = "▀▄▄█ █▀▀   █  ▀▄▄▀ █▀▀▄ █▄▄▀";
 
 pub fn render(frame: &mut Frame, area: Rect) {
     let area = area.inner(Margin::new(1, 0));
