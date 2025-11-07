@@ -54,9 +54,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.data = path;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the path portion of the --data flag",
-                    ));
+                    return Err(VibeError::new("missing the path portion of the --data flag"));
                 }
             }
             "--device" => {
@@ -64,9 +62,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.device = path;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the device portion of the --device flag",
-                    ));
+                    return Err(VibeError::new("missing the device portion of the --device flag"));
                 }
             }
             "--iterations" => {
@@ -74,9 +70,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.iterations = str::parse::<usize>(iterations.as_str())?;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the number portion of the --iterations flag",
-                    ));
+                    return Err(VibeError::new("missing the number portion of the --iterations flag"));
                 }
             }
             "--batch-size" => {
@@ -84,9 +78,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.batch_size = str::parse::<usize>(size.as_str())?;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the size portion of the --batch-size flag",
-                    ));
+                    return Err(VibeError::new("missing the size portion of the --batch-size flag"));
                 }
             }
             "--block-size" => {
@@ -94,9 +86,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.block_size = str::parse::<usize>(size.as_str())?;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the size portion of the --block-size flag",
-                    ));
+                    return Err(VibeError::new("missing the size portion of the --block-size flag"));
                 }
             }
             "--embedding-size" => {
@@ -104,9 +94,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.embedding_size = str::parse::<usize>(size.as_str())?;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the size portion of the --embedding-size flag",
-                    ));
+                    return Err(VibeError::new("missing the size portion of the --embedding-size flag"));
                 }
             }
             "--hidden-size" => {
@@ -114,9 +102,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.hidden_size = str::parse::<usize>(size.as_str())?;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the size portion of the --hidden-size flag",
-                    ));
+                    return Err(VibeError::new("missing the size portion of the --hidden-size flag"));
                 }
             }
             "--learn-rate" => {
@@ -124,9 +110,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.learn_rate = str::parse::<f32>(rate.as_str())?;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the rate portion of the --learn-rate flag",
-                    ));
+                    return Err(VibeError::new("missing the rate portion of the --learn-rate flag"));
                 }
             }
             "--generate" => {
@@ -134,9 +118,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                     options.generate = str::parse::<usize>(count.as_str())?;
                 } else {
                     print_help();
-                    return Err(VibeError::new(
-                        "missing the number portion of the --generate flag",
-                    ));
+                    return Err(VibeError::new("missing the number portion of the --generate flag"));
                 }
             }
             _ => {
@@ -153,10 +135,7 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
 fn print_help() {
     println!("usage:");
     println!("command");
-    println!(
-        "\t--data           <data path>      ({})",
-        DEFAULT_DATA_PATH
-    );
+    println!("\t--data           <data path>      ({})", DEFAULT_DATA_PATH);
     println!(
         "\t--device         <{}|{}|{}> ({})",
         device::DEVICE_NAME_CPU,
@@ -164,29 +143,11 @@ fn print_help() {
         device::DEVICE_NAME_METAL,
         DEFAULT_DEVICE
     );
-    println!(
-        "\t--iterations     <num>            ({})",
-        DEFAULT_ITERATIONS
-    );
-    println!(
-        "\t--batch-size     <num>            ({})",
-        DEFAULT_BATCH_SIZE
-    );
-    println!(
-        "\t--block-size     <num>            ({})",
-        DEFAULT_BLOCK_SIZE
-    );
-    println!(
-        "\t--embedding-size <num>            ({})",
-        DEFAULT_EMBEDDING_SIZE
-    );
-    println!(
-        "\t--hidden-size    <num>            ({})",
-        DEFAULT_HIDDEN_SIZE
-    );
-    println!(
-        "\t--learn-rate     <rate>           ({})",
-        DEFAULT_LEARN_RATE
-    );
+    println!("\t--iterations     <num>            ({})", DEFAULT_ITERATIONS);
+    println!("\t--batch-size     <num>            ({})", DEFAULT_BATCH_SIZE);
+    println!("\t--block-size     <num>            ({})", DEFAULT_BLOCK_SIZE);
+    println!("\t--embedding-size <num>            ({})", DEFAULT_EMBEDDING_SIZE);
+    println!("\t--hidden-size    <num>            ({})", DEFAULT_HIDDEN_SIZE);
+    println!("\t--learn-rate     <rate>           ({})", DEFAULT_LEARN_RATE);
     println!("\t--generate       <num>            ({})", DEFAULT_GENERATE);
 }

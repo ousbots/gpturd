@@ -11,12 +11,10 @@ use crate::{
 
 use crossterm::event::{self, KeyCode};
 use ratatui::{
+    DefaultTerminal, Terminal,
     backend::CrosstermBackend,
     crossterm::execute,
-    crossterm::terminal::{
-        disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-    },
-    DefaultTerminal, Terminal,
+    crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use std::io;
 use std::sync::mpsc::Receiver;
@@ -98,19 +96,13 @@ impl App {
             }
         }
 
-        if event
-            .as_key_press_event()
-            .is_some_and(|key| key.code == KeyCode::Char('g'))
-        {
+        if event.as_key_press_event().is_some_and(|key| key.code == KeyCode::Char('g')) {
             if self.state != State::Generate {
                 self.state = State::Generate;
             }
         }
 
-        if event
-            .as_key_press_event()
-            .is_some_and(|key| key.code == KeyCode::Char('p'))
-        {
+        if event.as_key_press_event().is_some_and(|key| key.code == KeyCode::Char('p')) {
             self.show_generated = !self.show_generated;
         }
 
@@ -127,17 +119,13 @@ impl App {
         let options = self.options.clone();
         let mut model = self.model.clone();
 
-        self.model_thread = Some(thread::spawn(move || {
-            model.generate(options.iterations, sender)
-        }));
+        self.model_thread = Some(thread::spawn(move || model.generate(options.generate, sender)));
 
         self.process_messages(receiver)?;
 
         // Wait on the generation thread then restore the model.
         if let Some(thread) = self.model_thread.take() {
-            let result = thread
-                .join()
-                .map_err(|err| VibeError::new(format!("{:?}", err)))?;
+            let result = thread.join().map_err(|err| VibeError::new(format!("{:?}", err)))?;
             result?;
         }
 
@@ -156,17 +144,13 @@ impl App {
 
         let data = parse::training_data(&options.data, options.block_size, &model.device)?;
 
-        self.model_thread = Some(thread::spawn(move || {
-            model.train(options.iterations, data, sender)
-        }));
+        self.model_thread = Some(thread::spawn(move || model.train(options.iterations, data, sender)));
 
         self.process_messages(receiver)?;
 
         // Wait on the training thread then restore the model.
         if let Some(thread) = self.model_thread.take() {
-            let result = thread
-                .join()
-                .map_err(|err| VibeError::new(format!("{:?}", err)))?;
+            let result = thread.join().map_err(|err| VibeError::new(format!("{:?}", err)))?;
             result?;
         }
 
@@ -187,8 +171,7 @@ impl App {
                         self.draw_main()?;
                     }
                     LossType::Validation => {
-                        self.validation_loss_data
-                            .push((iteration as f64, loss as f64));
+                        self.validation_loss_data.push((iteration as f64, loss as f64));
                         self.draw_main()?;
                     }
                 },

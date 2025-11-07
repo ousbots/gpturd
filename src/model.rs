@@ -8,7 +8,7 @@ use crate::{
     error::VibeError,
 };
 
-use candle_core::{backprop::GradStore, Device, Tensor, Var};
+use candle_core::{Device, Tensor, Var, backprop::GradStore};
 use candle_nn::{loss, ops};
 use rand::Rng;
 use std::sync::mpsc::Sender;
@@ -47,10 +47,7 @@ impl Model {
             weights_1: Var::rand(
                 0f32,
                 (5.0 / 3.0) / (options.embedding_size as f32 * options.block_size as f32).sqrt(),
-                (
-                    options.embedding_size * options.block_size,
-                    options.hidden_size,
-                ),
+                (options.embedding_size * options.block_size, options.hidden_size),
                 &device,
             )?,
             biases_1: Var::rand(0f32, 0.01f32, options.hidden_size, &device)?,
@@ -70,41 +67,16 @@ impl Model {
     fn backpropagate(&mut self, loss: &Tensor) -> Result<(), VibeError> {
         let loss_grad = loss.backward()?;
 
-        backpropagate_parameter(
-            &mut self.c,
-            &loss_grad,
-            self.hyperparameters.learn_rate,
-            &self.device,
-        )?;
-        backpropagate_parameter(
-            &mut self.weights_1,
-            &loss_grad,
-            self.hyperparameters.learn_rate,
-            &self.device,
-        )?;
-        backpropagate_parameter(
-            &mut self.biases_1,
-            &loss_grad,
-            self.hyperparameters.learn_rate,
-            &self.device,
-        )?;
-        backpropagate_parameter(
-            &mut self.weights_2,
-            &loss_grad,
-            self.hyperparameters.learn_rate,
-            &self.device,
-        )?;
-        backpropagate_parameter(
-            &mut self.biases_2,
-            &loss_grad,
-            self.hyperparameters.learn_rate,
-            &self.device,
-        )?;
+        backpropagate_parameter(&mut self.c, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
+        backpropagate_parameter(&mut self.weights_1, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
+        backpropagate_parameter(&mut self.biases_1, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
+        backpropagate_parameter(&mut self.weights_2, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
+        backpropagate_parameter(&mut self.biases_2, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
 
         Ok(())
     }
 
-    fn forward_pass(&self, input: &Tensor, target: &Tensor) -> Result<Tensor, candle_core::Error> {
+    fn forward_pass(&self, input: &Tensor, target: &Tensor) -> Result<Tensor, VibeError> {
         // Embed the input into vectors.
         let embeddings = self.c.index_select(&input.flatten_all()?, 0)?;
 
@@ -118,23 +90,18 @@ impl Model {
         // Output layer.
         let logits = h.matmul(&self.weights_2)?.broadcast_add(&self.biases_2)?;
 
-        loss::cross_entropy(&logits, &target.to_dtype(candle_core::DType::U32)?)
+        Ok(loss::cross_entropy(&logits, &target.to_dtype(candle_core::DType::U32)?)?)
     }
 
-    pub fn generate(
-        &mut self,
-        iterations: usize,
-        sender: Sender<ModelMessage>,
-    ) -> Result<(), VibeError> {
+    pub fn generate(&mut self, iterations: usize, sender: Sender<ModelMessage>) -> Result<(), VibeError> {
         for _ in 0..iterations {
             let mut output: String = "".to_string();
             let mut context: Vec<u8> = vec![0; self.hyperparameters.block_size];
 
             loop {
-                let embeddings = self.c.index_select(
-                    &Tensor::new(context.clone(), &self.device)?.flatten_all()?,
-                    0,
-                )?;
+                let embeddings = self
+                    .c
+                    .index_select(&Tensor::new(context.clone(), &self.device)?.flatten_all()?, 0)?;
 
                 let h = embeddings
                     .reshape(((), self.weights_1.dims()[0]))?
@@ -172,20 +139,10 @@ impl Model {
     // the batch loss. This speeds up training by not having to calculate the entire gradient every
     // round. In the tradeoff between calculating the exact gradient every round versus running
     // more rounds, running more rounds shows better results.
-    pub fn train(
-        &mut self,
-        iterations: usize,
-        data: Data,
-        sender: Sender<ModelMessage>,
-    ) -> Result<(), VibeError> {
+    pub fn train(&mut self, iterations: usize, data: Data, sender: Sender<ModelMessage>) -> Result<(), VibeError> {
         for count in 0..iterations {
-            let batch_indices = Tensor::rand(
-                0f32,
-                data.input.dims()[0] as f32,
-                (self.hyperparameters.batch_size,),
-                &self.device,
-            )?
-            .to_dtype(candle_core::DType::U32)?;
+            let batch_indices = Tensor::rand(0f32, data.input.dims()[0] as f32, (self.hyperparameters.batch_size,), &self.device)?
+                .to_dtype(candle_core::DType::U32)?;
 
             let loss = self.forward_pass(
                 &data.input.index_select(&batch_indices.flatten_all()?, 0)?,
@@ -204,8 +161,7 @@ impl Model {
 
             // Send validation progress every few iterations.
             if count % 100 == 0 {
-                let validation_loss =
-                    self.forward_pass(&data.validation_input, &data.validation_target)?;
+                let validation_loss = self.forward_pass(&data.validation_input, &data.validation_target)?;
                 sender.send(ModelMessage::Progress {
                     loss_type: LossType::Validation,
                     iteration: count,
@@ -221,12 +177,7 @@ impl Model {
 }
 
 // Run the gradient descent backpropagation on a single parameter.
-fn backpropagate_parameter(
-    param: &mut Var,
-    loss_grad: &GradStore,
-    learn_rate: f32,
-    device: &Device,
-) -> Result<(), VibeError> {
+fn backpropagate_parameter(param: &mut Var, loss_grad: &GradStore, learn_rate: f32, device: &Device) -> Result<(), VibeError> {
     // Clear the gradient for this parameter.
     param.backward()?.remove(param.as_tensor());
 
@@ -236,8 +187,7 @@ fn backpropagate_parameter(
         .ok_or_else(|| VibeError::new("missing loss gradient"))?;
 
     // Compute the update: new_param = param - (gradient * learning_rate)
-    let updated_param =
-        param.broadcast_sub(&gradient.broadcast_mul(&Tensor::new(&[learn_rate], device)?)?)?;
+    let updated_param = param.broadcast_sub(&gradient.broadcast_mul(&Tensor::new(&[learn_rate], device)?)?)?;
 
     // Replace the parameter with the updated value.
     *param = Var::from_tensor(&updated_param)?;

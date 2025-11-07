@@ -16,13 +16,9 @@ pub const DEFAULT_DATA_PATH: &str = "data/names_short.txt";
 
 // Read the data into a list of strings using newlines as a separator.
 fn parse_data(path: &String) -> Result<Vec<String>, VibeError> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| VibeError::new(format!("unable to open {}: {}", path, e)))?;
+    let content = fs::read_to_string(path).map_err(|e| VibeError::new(format!("unable to open {}: {}", path, e)))?;
 
-    let items: Vec<String> = content
-        .lines()
-        .map(|elem| String::from(elem).trim().to_lowercase())
-        .collect();
+    let items: Vec<String> = content.lines().map(|elem| String::from(elem).trim().to_lowercase()).collect();
 
     Ok(items)
 }
@@ -40,8 +36,7 @@ pub fn training_data(path: &String, block_size: usize, device: &Device) -> Resul
     let training_end = (data.len() as f64 * 0.9).round() as usize;
 
     let (input, target) = tokenize::tokenize(&data[..training_end].to_vec(), block_size, device)?;
-    let (validation_input, validation_target) =
-        tokenize::tokenize(&data[training_end..].to_vec(), block_size, device)?;
+    let (validation_input, validation_target) = tokenize::tokenize(&data[training_end..].to_vec(), block_size, device)?;
 
     Ok(Data {
         input: input,

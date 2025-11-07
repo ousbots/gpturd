@@ -1,9 +1,9 @@
 use crate::ui::colors::{Palette, Rainbow};
 
 use ratatui::{
+    Frame,
     layout::{Constraint, Flex, Layout, Margin, Rect},
     widgets::Block,
-    Frame,
 };
 use std::iter::zip;
 

@@ -9,14 +9,8 @@ pub enum LossType {
 // Message types for communication between training thread and UI
 #[derive(Debug, Clone)]
 pub enum ModelMessage {
-    Progress {
-        loss_type: LossType,
-        iteration: usize,
-        loss: f32,
-    },
-    Generated {
-        text: String,
-    },
+    Progress { loss_type: LossType, iteration: usize, loss: f32 },
+    Generated { text: String },
     Finished,
 }
 

@@ -2,12 +2,12 @@ use crate::app::{device, options::Options};
 use crate::ui::{colors::Palette, generate_popup, logo};
 
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Layout, Rect, Spacing},
     style::{Color, Style, Stylize},
     symbols::Marker,
     text::{Line, Span},
     widgets::{Axis, Block, BorderType, Chart, Dataset, GraphType, Padding, Paragraph},
-    Frame,
 };
 
 // Draw the main screen showing the options and model training statistics with dynamic loss data.
@@ -21,9 +21,7 @@ pub fn draw(
 ) {
     let area = frame.area();
 
-    frame
-        .buffer_mut()
-        .set_style(area, (Palette::FG_COLOR, Palette::BG_COLOR));
+    frame.buffer_mut().set_style(area, (Palette::FG_COLOR, Palette::BG_COLOR));
 
     let main_layout = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]);
     let content_layout = Layout::horizontal([Constraint::Length(30), Constraint::Fill(1)]);
@@ -44,10 +42,7 @@ pub fn draw(
         Line::from(vec![
             Span::styled("device=", Style::default().fg(Color::Blue).bold()),
             if options.device == device::DEVICE_NAME_CPU {
-                Span::styled(
-                    options.device.clone(),
-                    Style::default().bg(Color::Red).fg(Color::Yellow).bold(),
-                )
+                Span::styled(options.device.clone(), Style::default().bg(Color::Red).fg(Color::Yellow).bold())
             } else {
                 Span::raw(options.device.clone())
             },
@@ -85,8 +80,7 @@ pub fn draw(
         ]),
     ];
 
-    let config_layout =
-        Layout::vertical([Constraint::Length(8), Constraint::Fill(1)]).spacing(Spacing::Space(1));
+    let config_layout = Layout::vertical([Constraint::Length(8), Constraint::Fill(1)]).spacing(Spacing::Space(1));
     let [logo_area, lower_config_area] = config_area.layout(&config_layout);
 
     let options_layout = Layout::vertical(Constraint::from_lengths([
@@ -103,10 +97,7 @@ pub fn draw(
         .padding(Padding::horizontal(1))
         .title("Training Options");
 
-    frame.render_widget(
-        Paragraph::new(options_lines).block(options_block),
-        options_area,
-    );
+    frame.render_widget(Paragraph::new(options_lines).block(options_block), options_area);
 
     let parameters_block = Block::bordered()
         .border_type(BorderType::Rounded)
@@ -114,10 +105,7 @@ pub fn draw(
         .padding(Padding::horizontal(1))
         .title("Model Hyperparameters");
 
-    frame.render_widget(
-        Paragraph::new(parameters_lines).block(parameters_block),
-        parameters_area,
-    );
+    frame.render_widget(Paragraph::new(parameters_lines).block(parameters_block), parameters_area);
 
     render_loss(frame, model_area, options, loss_data, validation_loss_data);
 
@@ -127,32 +115,14 @@ pub fn draw(
 }
 
 // Render the loss chart with dynamic data.
-fn render_loss(
-    frame: &mut Frame,
-    area: Rect,
-    options: &Options,
-    loss_data: &[(f64, f64)],
-    validation_loss_data: &[(f64, f64)],
-) {
+fn render_loss(frame: &mut Frame, area: Rect, options: &Options, loss_data: &[(f64, f64)], validation_loss_data: &[(f64, f64)]) {
     // Use either dynamic data or default data
     let training_data = loss_data.to_vec();
 
     let validation_data = validation_loss_data.to_vec();
 
-    // Calculate bounds for the chart
-    let max_x = training_data
-        .iter()
-        .chain(validation_data.iter())
-        .map(|(x, _)| *x)
-        .fold(options.iterations as f64, f64::max)
-        .round();
-
-    let max_y = training_data
-        .iter()
-        .chain(validation_data.iter())
-        .map(|(_, y)| *y)
-        .fold(6.0, f64::max)
-        .round();
+    let max_x = options.iterations;
+    let max_y = 10.0;
 
     let datasets = vec![
         Dataset::default()
@@ -163,14 +133,20 @@ fn render_loss(
             .data(&training_data),
         Dataset::default()
             .name("Validation Loss")
-            .marker(Marker::Dot)
+            .marker(Marker::Braille)
             .graph_type(GraphType::Scatter)
             .style(Palette::VALIDATION_LOSS_COLOR)
             .data(&validation_data),
     ];
 
-    let x_labels = vec!["0".to_string(), max_x.to_string()];
-    let y_labels = vec!["0".to_string(), max_y.to_string()];
+    let mut x_labels = vec![];
+    let mut iters = 0;
+    while iters <= max_x {
+        x_labels.push(iters.to_string());
+        iters += 100;
+    }
+
+    let y_labels = vec!["0".to_string(), "5".to_string(), max_y.to_string()];
 
     let chart = Chart::new(datasets)
         .style(Style::default().fg(Palette::FG_COLOR).bg(Palette::BG_COLOR))
@@ -183,7 +159,7 @@ fn render_loss(
         )
         .x_axis(
             Axis::default()
-                .bounds([0., max_x])
+                .bounds([0., max_x as f64])
                 .style(Style::default().fg(Palette::FG_COLOR))
                 .labels(x_labels),
         )

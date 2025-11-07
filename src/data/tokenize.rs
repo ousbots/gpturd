@@ -5,11 +5,7 @@ use candle_core::{Device, Tensor};
 // Tokenize a list of strings for neural network training.
 //
 // Strings are tokenized characterwise in blocks specified by options.block_size.
-pub fn tokenize(
-    words: &Vec<String>,
-    block_size: usize,
-    device: &Device,
-) -> Result<(Tensor, Tensor), VibeError> {
+pub fn tokenize(words: &Vec<String>, block_size: usize, device: &Device) -> Result<(Tensor, Tensor), VibeError> {
     let delimiter: char = convert::LETTERS[0];
     let mut input: Vec<Vec<u8>> = vec![];
     let mut target: Vec<u8> = vec![];
@@ -30,11 +26,7 @@ pub fn tokenize(
         }
     }
 
-    let input_tensor = Tensor::from_vec(
-        input.iter().flatten().copied().collect(),
-        (input.len(), input[0].len()),
-        device,
-    )?;
+    let input_tensor = Tensor::from_vec(input.iter().flatten().copied().collect(), (input.len(), input[0].len()), device)?;
 
     let target_len = target.len();
     let target_tensor = Tensor::from_vec(target, target_len, device)?;
