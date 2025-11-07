@@ -1,9 +1,9 @@
-use crate::app::message::ModelMessage;
+use crate::app::message::{ModelCommandMessage, ModelResultMessage};
 
 use std::fmt;
 
 /// Custom error type for anything and everything, the vibe error.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VibeError {
     message: String,
 }
@@ -44,8 +44,14 @@ impl From<std::num::ParseFloatError> for VibeError {
     }
 }
 
-impl From<std::sync::mpsc::SendError<ModelMessage>> for VibeError {
-    fn from(err: std::sync::mpsc::SendError<ModelMessage>) -> Self {
-        VibeError::new(format!("Failed to parse float: {}", err))
+impl From<std::sync::mpsc::SendError<ModelResultMessage>> for VibeError {
+    fn from(err: std::sync::mpsc::SendError<ModelResultMessage>) -> Self {
+        VibeError::new(format!("Failed to send model message: {}", err))
+    }
+}
+
+impl From<std::sync::mpsc::SendError<ModelCommandMessage>> for VibeError {
+    fn from(err: std::sync::mpsc::SendError<ModelCommandMessage>) -> Self {
+        VibeError::new(format!("Failed to send model message: {}", err))
     }
 }

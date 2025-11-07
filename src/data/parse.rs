@@ -4,7 +4,7 @@ use candle_core::{Device, Tensor};
 use rand::seq::SliceRandom;
 use std::fs;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Data {
     pub input: Tensor,
     pub target: Tensor,

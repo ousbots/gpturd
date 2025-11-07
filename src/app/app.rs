@@ -1,11 +1,10 @@
 use crate::{
     app::{
-        message::{self, LossType, ModelMessage},
+        message::{self, LossType, ModelCommandMessage, ModelResultMessage},
         options::{self, Options},
     },
-    data::parse,
     error::VibeError,
-    model::Model,
+    model,
     ui::main_screen,
 };
 
@@ -17,7 +16,7 @@ use ratatui::{
     crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use std::io;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
 pub struct App {
@@ -28,7 +27,8 @@ pub struct App {
     pub loss_data: Vec<(f64, f64)>,
     pub validation_loss_data: Vec<(f64, f64)>,
     pub generated_data: Vec<String>,
-    pub model: Model,
+    pub model_commands: Sender<ModelCommandMessage>,
+    pub model_results: Receiver<ModelResultMessage>,
     pub model_thread: Option<JoinHandle<Result<(), VibeError>>>,
 }
 
@@ -41,6 +41,7 @@ pub enum State {
 }
 
 impl App {
+    // Initialize the terminal, parse options, and spawn the model thread.
     pub fn new() -> Result<Self, VibeError> {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend).unwrap_or_else(|err| {
@@ -49,6 +50,11 @@ impl App {
 
         let mut options = Options::new();
         options::parse_args(&mut options)?;
+        let model_options = options.clone();
+
+        let (commands_tx, commands_rx) = message::create_command_channel();
+        let (results_tx, results_rx) = message::create_results_channel();
+        let model_thread = Some(thread::spawn(move || model::run_model(commands_rx, results_tx, &model_options)));
 
         Ok(Self {
             terminal: terminal,
@@ -57,12 +63,14 @@ impl App {
             loss_data: Vec::new(),
             validation_loss_data: Vec::new(),
             generated_data: Vec::new(),
-            model: Model::init(&options)?,
+            model_commands: commands_tx,
+            model_results: results_rx,
             options: options,
-            model_thread: None,
+            model_thread: model_thread,
         })
     }
 
+    // Draw the main interface screen.
     pub fn draw_main(&mut self) -> Result<(), VibeError> {
         self.terminal.draw(|frame| {
             main_screen::draw(
@@ -77,6 +85,7 @@ impl App {
         Ok(())
     }
 
+    // Process user input.
     fn handle_input(&mut self) -> Result<(), VibeError> {
         let event = event::read()?;
 
@@ -109,59 +118,34 @@ impl App {
         Ok(())
     }
 
-    // Run the model text generation in a new thread.
+    // Send generate command to the model thread.
     fn start_generation(&mut self) -> Result<(), VibeError> {
-        if self.model_thread.is_some() {
-            return Ok(());
-        }
+        self.model_commands.send(ModelCommandMessage::Generate {
+            count: self.options.generate,
+        })?;
 
-        let (sender, receiver) = message::create_channel();
-        let options = self.options.clone();
-        let mut model = self.model.clone();
-
-        self.model_thread = Some(thread::spawn(move || model.generate(options.generate, sender)));
-
-        self.process_messages(receiver)?;
-
-        // Wait on the generation thread then restore the model.
-        if let Some(thread) = self.model_thread.take() {
-            let result = thread.join().map_err(|err| VibeError::new(format!("{:?}", err)))?;
-            result?;
-        }
+        self.process_messages()?;
 
         Ok(())
     }
 
-    // Run the model training in a new thread.
+    // Send training command to the model thread.
     fn start_training(&mut self) -> Result<(), VibeError> {
-        if self.model_thread.is_some() {
-            return Ok(());
-        }
+        self.model_commands.send(ModelCommandMessage::Train {
+            iterations: self.options.iterations,
+            data_path: self.options.data.clone(),
+        })?;
 
-        let (sender, receiver) = message::create_channel();
-        let options = self.options.clone();
-        let mut model = self.model.clone();
-
-        let data = parse::training_data(&options.data, options.block_size, &model.device)?;
-
-        self.model_thread = Some(thread::spawn(move || model.train(options.iterations, data, sender)));
-
-        self.process_messages(receiver)?;
-
-        // Wait on the training thread then restore the model.
-        if let Some(thread) = self.model_thread.take() {
-            let result = thread.join().map_err(|err| VibeError::new(format!("{:?}", err)))?;
-            result?;
-        }
+        self.process_messages()?;
 
         Ok(())
     }
 
     // Process all training messages, re-drawing as needed.
-    fn process_messages(&mut self, receiver: Receiver<ModelMessage>) -> Result<(), VibeError> {
-        while let Ok(message) = receiver.recv() {
+    fn process_messages(&mut self) -> Result<(), VibeError> {
+        while let Ok(message) = self.model_results.recv() {
             match message {
-                ModelMessage::Progress {
+                ModelResultMessage::Progress {
                     loss_type,
                     iteration,
                     loss,
@@ -175,13 +159,23 @@ impl App {
                         self.draw_main()?;
                     }
                 },
-                ModelMessage::Generated { text } => {
+
+                ModelResultMessage::Generated { text } => {
                     self.generated_data.push(text);
                     if self.show_generated {
                         self.draw_main()?;
                     }
                 }
-                ModelMessage::Finished => {
+
+                // TODO: errors should be displayed separately from generated text.
+                ModelResultMessage::Error { err } => {
+                    self.generated_data.push(err.to_string());
+                    if self.show_generated {
+                        self.draw_main()?;
+                    }
+                }
+
+                ModelResultMessage::Finished => {
                     break;
                 }
             }
@@ -190,6 +184,7 @@ impl App {
         Ok(())
     }
 
+    // App state machine.
     pub fn run(&mut self) -> Result<(), VibeError> {
         enable_raw_mode()?;
         execute!(self.terminal.backend_mut(), EnterAlternateScreen)?;
@@ -218,5 +213,17 @@ impl App {
         self.terminal.show_cursor()?;
 
         Ok(())
+    }
+}
+
+// Send a shutdown command to the model thread when the app is dropped.
+impl Drop for App {
+    fn drop(&mut self) {
+        // Send shutdown command to model thread and wait for it to finish.
+        let _ = self.model_commands.send(ModelCommandMessage::Shutdown);
+
+        if let Some(thread) = self.model_thread.take() {
+            let _ = thread.join();
+        }
     }
 }

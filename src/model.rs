@@ -1,17 +1,17 @@
 use crate::{
     app::{
         device,
-        message::{LossType, ModelMessage},
+        message::{LossType, ModelCommandMessage, ModelResultMessage},
         options::Options,
     },
-    data::{convert, parse::Data},
+    data::{convert, parse},
     error::VibeError,
 };
 
 use candle_core::{Device, Tensor, Var, backprop::GradStore};
 use candle_nn::{loss, ops};
 use rand::Rng;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Receiver, Sender};
 
 // The vocabulary is hardcoded to the 26 letters plus the special delimiter character.
 const VOCAB_SIZE: usize = 27;
@@ -93,7 +93,7 @@ impl Model {
         Ok(loss::cross_entropy(&logits, &target.to_dtype(candle_core::DType::U32)?)?)
     }
 
-    pub fn generate(&mut self, iterations: usize, sender: Sender<ModelMessage>) -> Result<(), VibeError> {
+    pub fn generate(&mut self, iterations: usize, sender: &Sender<ModelResultMessage>) -> Result<(), VibeError> {
         for _ in 0..iterations {
             let mut output: String = "".to_string();
             let mut context: Vec<u8> = vec![0; self.hyperparameters.block_size];
@@ -123,12 +123,12 @@ impl Model {
                 context.push(position as u8);
             }
 
-            let _ = sender.send(ModelMessage::Generated {
-                text: format!("    {}", output),
+            let _ = sender.send(ModelResultMessage::Generated {
+                text: format!("{}", output),
             });
         }
 
-        let _ = sender.send(ModelMessage::Finished);
+        let _ = sender.send(ModelResultMessage::Finished);
 
         Ok(())
     }
@@ -139,7 +139,10 @@ impl Model {
     // the batch loss. This speeds up training by not having to calculate the entire gradient every
     // round. In the tradeoff between calculating the exact gradient every round versus running
     // more rounds, running more rounds shows better results.
-    pub fn train(&mut self, iterations: usize, data: Data, sender: Sender<ModelMessage>) -> Result<(), VibeError> {
+    pub fn train(&mut self, iterations: usize, data_path: String, sender: &Sender<ModelResultMessage>) -> Result<(), VibeError> {
+        // Tokenize the training data.
+        let data = parse::training_data(&data_path, self.hyperparameters.block_size, &self.device)?;
+
         for count in 0..iterations {
             let batch_indices = Tensor::rand(0f32, data.input.dims()[0] as f32, (self.hyperparameters.batch_size,), &self.device)?
                 .to_dtype(candle_core::DType::U32)?;
@@ -153,7 +156,7 @@ impl Model {
 
             // Send progress updates.
             let loss_val: f32 = loss.clone().to_device(&Device::Cpu)?.to_scalar()?;
-            let _ = sender.send(ModelMessage::Progress {
+            let _ = sender.send(ModelResultMessage::Progress {
                 loss_type: LossType::Training,
                 iteration: count,
                 loss: loss_val.clone(),
@@ -162,7 +165,7 @@ impl Model {
             // Send validation progress every few iterations.
             if count % 100 == 0 {
                 let validation_loss = self.forward_pass(&data.validation_input, &data.validation_target)?;
-                sender.send(ModelMessage::Progress {
+                sender.send(ModelResultMessage::Progress {
                     loss_type: LossType::Validation,
                     iteration: count,
                     loss: validation_loss.to_vec0::<f32>()?,
@@ -170,7 +173,7 @@ impl Model {
             }
         }
 
-        // let _ = sender.send(ModelMessage::Finished);
+        sender.send(ModelResultMessage::Finished)?;
 
         Ok(())
     }
@@ -211,4 +214,34 @@ fn random_sample(probs: &Tensor) -> Result<usize, VibeError> {
     }
 
     Ok(cumulative_sum.len() - 1)
+}
+
+// Main event loop for the model thread.
+pub fn run_model(commands: Receiver<ModelCommandMessage>, results: Sender<ModelResultMessage>, options: &Options) -> Result<(), VibeError> {
+    let mut model = Model::init(options)?;
+
+    loop {
+        match commands.recv() {
+            Ok(ModelCommandMessage::Train { iterations, data_path }) => {
+                model.train(iterations, data_path, &results).unwrap_or_else(|err| {
+                    _ = results.send(ModelResultMessage::Generated { text: err.to_string() });
+                });
+            }
+
+            Ok(ModelCommandMessage::Generate { count }) => {
+                model.generate(count, &results).unwrap_or_else(|err| {
+                    _ = results.send(ModelResultMessage::Generated { text: err.to_string() });
+                });
+            }
+
+            Ok(ModelCommandMessage::Shutdown) => {
+                break;
+            }
+
+            Err(_) => {
+                break;
+            }
+        }
+    }
+    Ok(())
 }

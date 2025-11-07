@@ -10,7 +10,7 @@ use ratatui::{
 pub fn draw(frame: &mut Frame, generated: &Vec<String>) {
     let area = frame.area();
     let vertical = Layout::vertical([Constraint::Percentage(60)]).flex(Flex::Center);
-    let horizontal = Layout::horizontal([Constraint::Percentage(20)]).flex(Flex::Center);
+    let horizontal = Layout::horizontal([Constraint::Percentage(40)]).flex(Flex::Center);
     let [area] = area.layout(&vertical);
     let [area] = area.layout(&horizontal);
 
