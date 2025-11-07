@@ -224,13 +224,13 @@ pub fn run_model(commands: Receiver<ModelCommandMessage>, results: Sender<ModelR
         match commands.recv() {
             Ok(ModelCommandMessage::Train { iterations, data_path }) => {
                 model.train(iterations, data_path, &results).unwrap_or_else(|err| {
-                    _ = results.send(ModelResultMessage::Generated { text: err.to_string() });
+                    _ = results.send(ModelResultMessage::Error { err: err });
                 });
             }
 
             Ok(ModelCommandMessage::Generate { count }) => {
                 model.generate(count, &results).unwrap_or_else(|err| {
-                    _ = results.send(ModelResultMessage::Generated { text: err.to_string() });
+                    _ = results.send(ModelResultMessage::Error { err: err });
                 });
             }
 
