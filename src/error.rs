@@ -1,4 +1,4 @@
-use crate::app::message::{ModelCommandMessage, ModelResultMessage};
+use crate::app::message::{AppMessage, ModelCommandMessage};
 
 use std::fmt;
 
@@ -44,8 +44,8 @@ impl From<std::num::ParseFloatError> for VibeError {
     }
 }
 
-impl From<std::sync::mpsc::SendError<ModelResultMessage>> for VibeError {
-    fn from(err: std::sync::mpsc::SendError<ModelResultMessage>) -> Self {
+impl From<std::sync::mpsc::SendError<AppMessage>> for VibeError {
+    fn from(err: std::sync::mpsc::SendError<AppMessage>) -> Self {
         VibeError::new(format!("Failed to send model message: {}", err))
     }
 }

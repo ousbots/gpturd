@@ -1,6 +1,6 @@
 use crate::{
     app::{
-        message::{self, LossType, ModelCommandMessage, ModelResultMessage},
+        message::{self, AppMessage, EventMessage, LossType, ModelCommandMessage, ModelResultMessage},
         options::{self, Options},
     },
     error::VibeError,
@@ -28,7 +28,7 @@ pub struct App {
     pub validation_loss_data: Vec<(f64, f64)>,
     pub generated_data: Vec<String>,
     pub model_commands: Sender<ModelCommandMessage>,
-    pub model_results: Receiver<ModelResultMessage>,
+    pub messages: Receiver<AppMessage>,
     pub model_thread: Option<JoinHandle<Result<(), VibeError>>>,
 }
 
@@ -41,7 +41,7 @@ pub enum State {
 }
 
 impl App {
-    // Initialize the terminal, parse options, and spawn the model thread.
+    // Initialize the terminal, parse options, spawn event and model threads.
     pub fn new() -> Result<Self, VibeError> {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend).unwrap_or_else(|err| {
@@ -53,8 +53,22 @@ impl App {
         let model_options = options.clone();
 
         let (commands_tx, commands_rx) = message::create_command_channel();
-        let (results_tx, results_rx) = message::create_results_channel();
-        let model_thread = Some(thread::spawn(move || model::run_model(commands_rx, results_tx, &model_options)));
+        let (data_tx, data_rx) = message::create_data_channel();
+
+        let data_tx_model = data_tx.clone();
+        let model_thread = Some(thread::spawn(move || model::run_model(commands_rx, data_tx_model, &model_options)));
+
+        thread::spawn(move || {
+            loop {
+                if let Ok(event) = event::read() {
+                    if let Some(key) = event.as_key_press_event() {
+                        if let Err(_) = data_tx.send(AppMessage::Event(EventMessage::Key { event: key })) {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
 
         Ok(Self {
             terminal: terminal,
@@ -64,7 +78,7 @@ impl App {
             validation_loss_data: Vec::new(),
             generated_data: Vec::new(),
             model_commands: commands_tx,
-            model_results: results_rx,
+            messages: data_rx,
             options: options,
             model_thread: model_thread,
         })
@@ -86,33 +100,62 @@ impl App {
     }
 
     // Process user input.
-    fn handle_input(&mut self) -> Result<(), VibeError> {
-        let event = event::read()?;
+    fn process_event_message(&mut self, event: EventMessage) -> Result<(), VibeError> {
+        match event {
+            EventMessage::Key { event } => match event.code {
+                KeyCode::Char('q') | KeyCode::Esc => {
+                    self.state = State::Exit;
+                }
 
-        if event
-            .as_key_press_event()
-            .is_some_and(|key| key.code == KeyCode::Char('q') || key.code == KeyCode::Esc)
-        {
-            self.state = State::Exit;
+                KeyCode::Char('t') | KeyCode::Enter => {
+                    if self.state != State::Training {
+                        self.state = State::Training;
+                    }
+                }
+
+                KeyCode::Char('g') => {
+                    if self.state != State::Generate {
+                        self.state = State::Generate;
+                    }
+                }
+
+                KeyCode::Char('p') => {
+                    self.show_generated = !self.show_generated;
+                }
+
+                _ => {}
+            },
         }
 
-        if event
-            .as_key_press_event()
-            .is_some_and(|key| key.code == KeyCode::Char('t') || key.code == KeyCode::Enter)
-        {
-            if self.state != State::Training {
-                self.state = State::Training;
+        Ok(())
+    }
+
+    // Process all training messages, re-drawing as needed.
+    fn process_model_message(&mut self, message: ModelResultMessage) -> Result<(), VibeError> {
+        match message {
+            ModelResultMessage::Progress {
+                loss_type,
+                iteration,
+                loss,
+            } => match loss_type {
+                LossType::Training => {
+                    self.loss_data.push((iteration as f64, loss as f64));
+                }
+                LossType::Validation => {
+                    self.validation_loss_data.push((iteration as f64, loss as f64));
+                }
+            },
+
+            ModelResultMessage::Generated { text } => {
+                self.generated_data.push(text);
             }
-        }
 
-        if event.as_key_press_event().is_some_and(|key| key.code == KeyCode::Char('g')) {
-            if self.state != State::Generate {
-                self.state = State::Generate;
+            // TODO: errors should be displayed separately from generated text.
+            ModelResultMessage::Error { err } => {
+                self.generated_data.push(err.to_string());
             }
-        }
 
-        if event.as_key_press_event().is_some_and(|key| key.code == KeyCode::Char('p')) {
-            self.show_generated = !self.show_generated;
+            ModelResultMessage::Finished => {}
         }
 
         Ok(())
@@ -124,8 +167,6 @@ impl App {
             count: self.options.generate,
         })?;
 
-        self.process_messages()?;
-
         Ok(())
     }
 
@@ -134,52 +175,8 @@ impl App {
         self.model_commands.send(ModelCommandMessage::Train {
             iterations: self.options.iterations,
             data_path: self.options.data.clone(),
+            start: self.loss_data.last().unwrap_or(&(0., 0.)).0 as usize,
         })?;
-
-        self.process_messages()?;
-
-        Ok(())
-    }
-
-    // Process all training messages, re-drawing as needed.
-    fn process_messages(&mut self) -> Result<(), VibeError> {
-        while let Ok(message) = self.model_results.recv() {
-            match message {
-                ModelResultMessage::Progress {
-                    loss_type,
-                    iteration,
-                    loss,
-                } => match loss_type {
-                    LossType::Training => {
-                        self.loss_data.push((iteration as f64, loss as f64));
-                        self.draw_main()?;
-                    }
-                    LossType::Validation => {
-                        self.validation_loss_data.push((iteration as f64, loss as f64));
-                        self.draw_main()?;
-                    }
-                },
-
-                ModelResultMessage::Generated { text } => {
-                    self.generated_data.push(text);
-                    if self.show_generated {
-                        self.draw_main()?;
-                    }
-                }
-
-                // TODO: errors should be displayed separately from generated text.
-                ModelResultMessage::Error { err } => {
-                    self.generated_data.push(err.to_string());
-                    if self.show_generated {
-                        self.draw_main()?;
-                    }
-                }
-
-                ModelResultMessage::Finished => {
-                    break;
-                }
-            }
-        }
 
         Ok(())
     }
@@ -205,7 +202,17 @@ impl App {
                 State::Exit => break,
             }
 
-            self.handle_input()?;
+            match self.messages.recv() {
+                Ok(AppMessage::Model(message)) => {
+                    self.process_model_message(message)?;
+                }
+
+                Ok(AppMessage::Event(message)) => {
+                    self.process_event_message(message)?;
+                }
+
+                Err(_err) => {}
+            }
         }
 
         disable_raw_mode()?;

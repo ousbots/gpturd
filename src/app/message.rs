@@ -1,4 +1,6 @@
 use crate::error::VibeError;
+
+use crossterm::event::KeyEvent;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug, Clone)]
@@ -19,17 +21,32 @@ pub enum ModelResultMessage {
 // Message types for sending commands to the model.
 #[derive(Debug)]
 pub enum ModelCommandMessage {
-    Train { iterations: usize, data_path: String },
-    Generate { count: usize },
+    Train {
+        iterations: usize,
+        data_path: String,
+        start: usize,
+    },
+    Generate {
+        count: usize,
+    },
     Shutdown,
 }
 
-// Create a new channel pair for training communication.
-pub fn create_results_channel() -> (Sender<ModelResultMessage>, Receiver<ModelResultMessage>) {
-    mpsc::channel()
+pub enum EventMessage {
+    Key { event: KeyEvent },
+}
+
+pub enum AppMessage {
+    Model(ModelResultMessage),
+    Event(EventMessage),
 }
 
 // Create a new channel pair for model commands.
 pub fn create_command_channel() -> (Sender<ModelCommandMessage>, Receiver<ModelCommandMessage>) {
+    mpsc::channel()
+}
+
+// Create a new channel pair for app events.
+pub fn create_data_channel() -> (Sender<AppMessage>, Receiver<AppMessage>) {
     mpsc::channel()
 }

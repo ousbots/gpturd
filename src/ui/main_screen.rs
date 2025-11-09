@@ -121,8 +121,16 @@ fn render_loss(frame: &mut Frame, area: Rect, options: &Options, loss_data: &[(f
 
     let validation_data = validation_loss_data.to_vec();
 
-    let max_x = options.iterations;
-    let max_y = 10.0;
+    let max_x = if let Some(elem) = loss_data.last() {
+        if elem.0 > options.iterations as f64 {
+            (elem.0 / 100.).ceil() * 100.
+        } else {
+            options.iterations as f64
+        }
+    } else {
+        options.iterations as f64
+    };
+    let max_y = 10.;
 
     let datasets = vec![
         Dataset::default()
@@ -139,13 +147,7 @@ fn render_loss(frame: &mut Frame, area: Rect, options: &Options, loss_data: &[(f
             .data(&validation_data),
     ];
 
-    let mut x_labels = vec![];
-    let mut iters = 0;
-    while iters <= max_x {
-        x_labels.push(iters.to_string());
-        iters += 100;
-    }
-
+    let x_labels = vec!["0".to_string(), max_x.to_string()];
     let y_labels = vec!["0".to_string(), "5".to_string(), max_y.to_string()];
 
     let chart = Chart::new(datasets)
@@ -159,7 +161,7 @@ fn render_loss(frame: &mut Frame, area: Rect, options: &Options, loss_data: &[(f
         )
         .x_axis(
             Axis::default()
-                .bounds([0., max_x as f64])
+                .bounds([0., max_x])
                 .style(Style::default().fg(Palette::FG_COLOR))
                 .labels(x_labels),
         )
