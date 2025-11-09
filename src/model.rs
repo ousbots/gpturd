@@ -8,7 +8,7 @@ use crate::{
     error::VibeError,
 };
 
-use candle_core::{Device, Tensor, Var, backprop::GradStore};
+use candle_core::{Device, Tensor, Var};
 use candle_nn::{loss, ops};
 use rand::Rng;
 use std::sync::mpsc::{Receiver, Sender};
@@ -64,14 +64,34 @@ impl Model {
         })
     }
 
+    // Run gradient descent backpropagation on the model parameters.
     fn backpropagate(&mut self, loss: &Tensor) -> Result<(), VibeError> {
         let loss_grad = loss.backward()?;
 
-        backpropagate_parameter(&mut self.c, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
-        backpropagate_parameter(&mut self.weights_1, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
-        backpropagate_parameter(&mut self.biases_1, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
-        backpropagate_parameter(&mut self.weights_2, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
-        backpropagate_parameter(&mut self.biases_2, &loss_grad, self.hyperparameters.learn_rate, &self.device)?;
+        let backpropagate_parameter = |param: &mut Var| -> Result<(), VibeError> {
+            // Clear the gradient for this parameter.
+            param.backward()?.remove(param.as_tensor());
+
+            // Get the gradient from the loss gradient store.
+            let gradient = loss_grad
+                .get(param.as_tensor())
+                .ok_or_else(|| VibeError::new("missing loss gradient"))?;
+
+            // Compute the update: new_param = param - (gradient * learning_rate)
+            let updated_param =
+                param.broadcast_sub(&gradient.broadcast_mul(&Tensor::new(&[self.hyperparameters.learn_rate], &self.device)?)?)?;
+
+            // Replace the parameter with the updated value.
+            *param = Var::from_tensor(&updated_param)?;
+
+            Ok(())
+        };
+
+        backpropagate_parameter(&mut self.c)?;
+        backpropagate_parameter(&mut self.weights_1)?;
+        backpropagate_parameter(&mut self.biases_1)?;
+        backpropagate_parameter(&mut self.weights_2)?;
+        backpropagate_parameter(&mut self.biases_2)?;
 
         Ok(())
     }
@@ -113,7 +133,21 @@ impl Model {
 
                 let probs = ops::softmax(&logits, 1)?;
 
-                let position = random_sample(&probs)?;
+                // Take a random sample from the probability tensor.
+                //
+                // In order to take the probability distribution into account, a cumulative sum of the
+                // probabilities is computed and the first index with a summed probability greater than a randomly
+                // chosen value is selected.
+                let mut position: usize = 0;
+                let random_val: f32 = rand::rng().random_range(0.0..1.0);
+                let cumulative_sum = probs.cumsum(1)?.squeeze(0)?.to_vec1()?;
+                for (index, &sum) in cumulative_sum.iter().enumerate() {
+                    if random_val <= sum {
+                        position = index;
+                        break;
+                    }
+                }
+
                 if position == 0 {
                     break;
                 }
@@ -177,43 +211,6 @@ impl Model {
 
         Ok(())
     }
-}
-
-// Run the gradient descent backpropagation on a single parameter.
-fn backpropagate_parameter(param: &mut Var, loss_grad: &GradStore, learn_rate: f32, device: &Device) -> Result<(), VibeError> {
-    // Clear the gradient for this parameter.
-    param.backward()?.remove(param.as_tensor());
-
-    // Get the gradient from the loss gradient store.
-    let gradient = loss_grad
-        .get(param.as_tensor())
-        .ok_or_else(|| VibeError::new("missing loss gradient"))?;
-
-    // Compute the update: new_param = param - (gradient * learning_rate)
-    let updated_param = param.broadcast_sub(&gradient.broadcast_mul(&Tensor::new(&[learn_rate], device)?)?)?;
-
-    // Replace the parameter with the updated value.
-    *param = Var::from_tensor(&updated_param)?;
-
-    Ok(())
-}
-
-// Take a random sample from the given probability tensor.
-//
-// In order to take the probability distribution into account, a cumulative sum of the
-// probabilities is computed and the first index with a summed probability greater than a randomly
-// chosen value is selected.
-fn random_sample(probs: &Tensor) -> Result<usize, VibeError> {
-    let random_val: f32 = rand::rng().random_range(0.0..1.0);
-
-    let cumulative_sum = probs.cumsum(1)?.squeeze(0)?.to_vec1()?;
-    for (index, &sum) in cumulative_sum.iter().enumerate() {
-        if random_val <= sum {
-            return Ok(index);
-        }
-    }
-
-    Ok(cumulative_sum.len() - 1)
 }
 
 // Main event loop for the model thread.
