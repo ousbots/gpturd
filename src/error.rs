@@ -44,9 +44,15 @@ impl From<std::num::ParseFloatError> for VibeError {
     }
 }
 
+impl From<std::sync::mpsc::RecvError> for VibeError {
+    fn from(err: std::sync::mpsc::RecvError) -> Self {
+        VibeError::new(format!("Failed to receive message: {}", err))
+    }
+}
+
 impl From<std::sync::mpsc::SendError<AppMessage>> for VibeError {
     fn from(err: std::sync::mpsc::SendError<AppMessage>) -> Self {
-        VibeError::new(format!("Failed to send model message: {}", err))
+        VibeError::new(format!("Failed to send app message: {}", err))
     }
 }
 

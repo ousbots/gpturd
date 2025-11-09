@@ -99,6 +99,20 @@ impl App {
         Ok(())
     }
 
+    fn handle_messages(&mut self) -> Result<(), VibeError> {
+        match self.messages.recv()? {
+            AppMessage::Model(message) => {
+                self.process_model_message(message)?;
+            }
+
+            AppMessage::Event(message) => {
+                self.process_event_message(message)?;
+            }
+        }
+
+        Ok(())
+    }
+
     // Process user input.
     fn process_event_message(&mut self, event: EventMessage) -> Result<(), VibeError> {
         match event {
@@ -108,15 +122,13 @@ impl App {
                 }
 
                 KeyCode::Char('t') | KeyCode::Enter => {
-                    if self.state != State::Training {
-                        self.state = State::Training;
-                    }
+                    self.start_training()?;
+                    self.state = State::Training;
                 }
 
                 KeyCode::Char('g') => {
-                    if self.state != State::Generate {
-                        self.state = State::Generate;
-                    }
+                    self.start_generation()?;
+                    self.state = State::Generate;
                 }
 
                 KeyCode::Char('p') => {
@@ -130,7 +142,7 @@ impl App {
         Ok(())
     }
 
-    // Process all training messages, re-drawing as needed.
+    // Process all training messages.
     fn process_model_message(&mut self, message: ModelResultMessage) -> Result<(), VibeError> {
         match message {
             ModelResultMessage::Progress {
@@ -153,9 +165,12 @@ impl App {
             // TODO: errors should be displayed separately from generated text.
             ModelResultMessage::Error { err } => {
                 self.generated_data.push(err.to_string());
+                self.state = State::Main;
             }
 
-            ModelResultMessage::Finished => {}
+            ModelResultMessage::Finished => {
+                self.state = State::Main;
+            }
         }
 
         Ok(())
@@ -163,20 +178,24 @@ impl App {
 
     // Send generate command to the model thread.
     fn start_generation(&mut self) -> Result<(), VibeError> {
-        self.model_commands.send(ModelCommandMessage::Generate {
-            count: self.options.generate,
-        })?;
+        if self.state == State::Main {
+            self.model_commands.send(ModelCommandMessage::Generate {
+                count: self.options.generate,
+            })?;
+        }
 
         Ok(())
     }
 
     // Send training command to the model thread.
     fn start_training(&mut self) -> Result<(), VibeError> {
-        self.model_commands.send(ModelCommandMessage::Train {
-            iterations: self.options.iterations,
-            data_path: self.options.data.clone(),
-            start: self.loss_data.last().unwrap_or(&(0., 0.)).0 as usize,
-        })?;
+        if self.state == State::Main {
+            self.model_commands.send(ModelCommandMessage::Train {
+                iterations: self.options.iterations,
+                data_path: self.options.data.clone(),
+                start: self.loss_data.last().unwrap_or(&(0., 0.)).0 as usize,
+            })?;
+        }
 
         Ok(())
     }
@@ -187,32 +206,12 @@ impl App {
         execute!(self.terminal.backend_mut(), EnterAlternateScreen)?;
 
         loop {
-            match self.state {
-                State::Main => {
-                    self.draw_main()?;
-                }
-                State::Training => {
-                    self.start_training()?;
-                    self.state = State::Main;
-                }
-                State::Generate => {
-                    self.start_generation()?;
-                    self.state = State::Main;
-                }
-                State::Exit => break,
+            if self.state == State::Exit {
+                break;
             }
 
-            match self.messages.recv() {
-                Ok(AppMessage::Model(message)) => {
-                    self.process_model_message(message)?;
-                }
-
-                Ok(AppMessage::Event(message)) => {
-                    self.process_event_message(message)?;
-                }
-
-                Err(_err) => {}
-            }
+            self.draw_main()?;
+            self.handle_messages()?;
         }
 
         disable_raw_mode()?;
