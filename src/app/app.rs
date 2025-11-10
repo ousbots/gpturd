@@ -50,12 +50,12 @@ impl App {
 
         let mut options = Options::new();
         options::parse_args(&mut options)?;
-        let model_options = options.clone();
 
         let (commands_tx, commands_rx) = message::create_command_channel();
         let (data_tx, data_rx) = message::create_data_channel();
 
         let data_tx_model = data_tx.clone();
+        let model_options = options.clone();
         let model_thread = thread::spawn(move || model::run_model(commands_rx, data_tx_model, &model_options));
 
         thread::spawn(move || {

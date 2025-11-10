@@ -2,7 +2,6 @@ use crate::{app::device, data::parse, error::VibeError};
 use std::env;
 
 const DEFAULT_DATA_PATH: &str = parse::DEFAULT_DATA_PATH;
-const DEFAULT_DEVICE: &str = device::DEVICE_NAME_CPU;
 const DEFAULT_ITERATIONS: usize = 1000;
 const DEFAULT_BATCH_SIZE: usize = 512;
 const DEFAULT_BLOCK_SIZE: usize = 3;
@@ -29,7 +28,7 @@ impl Options {
     pub fn new() -> Self {
         Self {
             data: DEFAULT_DATA_PATH.to_string(),
-            device: DEFAULT_DEVICE.to_string(),
+            device: device::find_default(),
             iterations: DEFAULT_ITERATIONS,
             batch_size: DEFAULT_BATCH_SIZE,
             block_size: DEFAULT_BLOCK_SIZE,
@@ -141,7 +140,7 @@ fn print_help() {
         device::DEVICE_NAME_CPU,
         device::DEVICE_NAME_CUDA,
         device::DEVICE_NAME_METAL,
-        DEFAULT_DEVICE
+        "auto",
     );
     println!("\t--iterations     <num>            ({})", DEFAULT_ITERATIONS);
     println!("\t--batch-size     <num>            ({})", DEFAULT_BATCH_SIZE);
