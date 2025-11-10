@@ -29,7 +29,7 @@ pub struct App {
     pub generated_data: Vec<String>,
     pub model_commands: Sender<ModelCommandMessage>,
     pub messages: Receiver<AppMessage>,
-    pub model_thread: Option<JoinHandle<Result<(), VibeError>>>,
+    pub model_thread: JoinHandle<Result<(), VibeError>>,
 }
 
 #[derive(PartialEq)]
@@ -56,7 +56,7 @@ impl App {
         let (data_tx, data_rx) = message::create_data_channel();
 
         let data_tx_model = data_tx.clone();
-        let model_thread = Some(thread::spawn(move || model::run_model(commands_rx, data_tx_model, &model_options)));
+        let model_thread = thread::spawn(move || model::run_model(commands_rx, data_tx_model, &model_options));
 
         thread::spawn(move || {
             loop {
@@ -118,17 +118,28 @@ impl App {
         match event {
             EventMessage::Key { event } => match event.code {
                 KeyCode::Char('q') | KeyCode::Esc => {
+                    self.model_commands.send(ModelCommandMessage::Shutdown)?;
                     self.state = State::Exit;
                 }
 
                 KeyCode::Char('t') | KeyCode::Enter => {
-                    self.start_training()?;
-                    self.state = State::Training;
+                    if self.state == State::Main {
+                        self.model_commands.send(ModelCommandMessage::Train {
+                            iterations: self.options.iterations,
+                            data_path: self.options.data.clone(),
+                            start: self.loss_data.last().unwrap_or(&(0., 0.)).0 as usize,
+                        })?;
+                        self.state = State::Training;
+                    }
                 }
 
                 KeyCode::Char('g') => {
-                    self.start_generation()?;
-                    self.state = State::Generate;
+                    if self.state == State::Main {
+                        self.model_commands.send(ModelCommandMessage::Generate {
+                            count: self.options.generate,
+                        })?;
+                        self.state = State::Generate;
+                    }
                 }
 
                 KeyCode::Char('p') => {
@@ -176,30 +187,6 @@ impl App {
         Ok(())
     }
 
-    // Send generate command to the model thread.
-    fn start_generation(&mut self) -> Result<(), VibeError> {
-        if self.state == State::Main {
-            self.model_commands.send(ModelCommandMessage::Generate {
-                count: self.options.generate,
-            })?;
-        }
-
-        Ok(())
-    }
-
-    // Send training command to the model thread.
-    fn start_training(&mut self) -> Result<(), VibeError> {
-        if self.state == State::Main {
-            self.model_commands.send(ModelCommandMessage::Train {
-                iterations: self.options.iterations,
-                data_path: self.options.data.clone(),
-                start: self.loss_data.last().unwrap_or(&(0., 0.)).0 as usize,
-            })?;
-        }
-
-        Ok(())
-    }
-
     // App state machine.
     pub fn run(&mut self) -> Result<(), VibeError> {
         enable_raw_mode()?;
@@ -219,17 +206,5 @@ impl App {
         self.terminal.show_cursor()?;
 
         Ok(())
-    }
-}
-
-// Send a shutdown command to the model thread when the app is dropped.
-impl Drop for App {
-    fn drop(&mut self) {
-        // Send shutdown command to model thread and wait for it to finish.
-        let _ = self.model_commands.send(ModelCommandMessage::Shutdown);
-
-        if let Some(thread) = self.model_thread.take() {
-            let _ = thread.join();
-        }
     }
 }
