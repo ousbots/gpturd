@@ -1,7 +1,8 @@
-use crate::{app::device, data::parse, error::VibeError};
+use crate::{app::device, data::parse, error::VibeError, model};
 use std::env;
 
 const DEFAULT_DATA_PATH: &str = parse::DEFAULT_DATA_PATH;
+const DEFAULT_MODEL_PATH: &str = model::DEFAULT_MODEL_PATH;
 const DEFAULT_ITERATIONS: usize = 1000;
 const DEFAULT_BATCH_SIZE: usize = 512;
 const DEFAULT_BLOCK_SIZE: usize = 3;
@@ -14,6 +15,7 @@ const DEFAULT_GENERATE: usize = 20;
 #[derive(Debug, Clone)]
 pub struct Options {
     pub data: String,
+    pub model_file: String,
     pub device: String,
     pub iterations: usize,
     pub batch_size: usize,
@@ -28,6 +30,7 @@ impl Options {
     pub fn new() -> Self {
         Self {
             data: DEFAULT_DATA_PATH.to_string(),
+            model_file: DEFAULT_MODEL_PATH.to_string(),
             device: device::find_default(),
             iterations: DEFAULT_ITERATIONS,
             batch_size: DEFAULT_BATCH_SIZE,
@@ -54,6 +57,14 @@ pub fn parse_args(options: &mut Options) -> Result<(), VibeError> {
                 } else {
                     print_help();
                     return Err(VibeError::new("missing the path portion of the --data flag"));
+                }
+            }
+            "--model" => {
+                if let Some(path) = args.pop() {
+                    options.model_file = path;
+                } else {
+                    print_help();
+                    return Err(VibeError::new("missing the path portion of the --model flag"));
                 }
             }
             "--device" => {
@@ -135,6 +146,7 @@ fn print_help() {
     println!("usage:");
     println!("command");
     println!("\t--data           <data path>      ({})", DEFAULT_DATA_PATH);
+    println!("\t--model          <model path>     ({})", DEFAULT_MODEL_PATH);
     println!(
         "\t--device         <{}|{}|{}> ({})",
         device::DEVICE_NAME_CPU,

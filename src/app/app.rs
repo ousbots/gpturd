@@ -117,11 +117,6 @@ impl App {
     fn process_event_message(&mut self, event: EventMessage) -> Result<(), VibeError> {
         match event {
             EventMessage::Key { event } => match event.code {
-                KeyCode::Char('q') | KeyCode::Esc => {
-                    self.model_commands.send(ModelCommandMessage::Shutdown)?;
-                    self.state = State::Exit;
-                }
-
                 KeyCode::Char('t') | KeyCode::Enter => {
                     if self.state == State::Main {
                         self.model_commands.send(ModelCommandMessage::Train {
@@ -143,6 +138,15 @@ impl App {
 
                 KeyCode::Char('p') => {
                     self.show_generated = !self.show_generated;
+                }
+
+                KeyCode::Char('s') => {
+                    self.model_commands.send(ModelCommandMessage::Save)?;
+                }
+
+                KeyCode::Char('q') | KeyCode::Esc => {
+                    self.model_commands.send(ModelCommandMessage::Shutdown)?;
+                    self.state = State::Exit;
                 }
 
                 _ => {}

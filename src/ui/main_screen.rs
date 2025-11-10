@@ -40,6 +40,10 @@ pub fn draw(
             Span::raw(options.data.clone()),
         ]),
         Line::from(vec![
+            Span::styled("model=", Style::default().fg(Color::Blue).bold()),
+            Span::raw(options.model_file.clone()),
+        ]),
+        Line::from(vec![
             Span::styled("device=", Style::default().fg(Color::Blue).bold()),
             if options.device == device::DEVICE_NAME_CPU {
                 Span::styled(options.device.clone(), Style::default().bg(Color::Red).fg(Color::Yellow).bold())
@@ -94,7 +98,11 @@ pub fn draw(
             Span::styled("show vibes", Style::default().fg(Color::LightGreen).bold()),
         ]),
         Line::from(vec![
-            Span::raw("q -> "),
+            Span::raw("s -> "),
+            Span::styled("save model", Style::default().fg(Color::LightGreen).bold()),
+        ]),
+        Line::from(vec![
+            Span::raw("q/esc -> "),
             Span::styled("quit", Style::default().fg(Color::Red).bold()),
         ]),
     ];

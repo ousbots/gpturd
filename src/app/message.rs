@@ -23,6 +23,7 @@ pub enum ModelResultMessage {
 pub enum ModelCommandMessage {
     Train { iterations: usize, start: usize },
     Vibe { count: usize },
+    Save,
     Shutdown,
 }
 

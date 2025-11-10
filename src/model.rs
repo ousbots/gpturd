@@ -11,10 +11,16 @@ use crate::{
     error::VibeError,
 };
 
-use candle_core::{Device, Tensor, Var};
+use candle_core::{Device, Tensor, Var, safetensors};
 use candle_nn::{loss, ops};
 use rand::Rng;
-use std::sync::mpsc::{Receiver, Sender};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::mpsc::{Receiver, Sender},
+};
+
+pub const DEFAULT_MODEL_PATH: &str = "model.safetensors";
 
 // The vocabulary is hardcoded to the 26 letters plus the special delimiter character.
 const VOCAB_SIZE: usize = 27;
@@ -22,6 +28,7 @@ const VOCAB_SIZE: usize = 27;
 #[derive(Clone)]
 pub struct Model {
     pub device: Device,
+    model_file: String,
     c: Var,
     weights_1: Var,
     biases_1: Var,
@@ -48,6 +55,7 @@ impl Model {
         let data = parse::training_data(&options.data, options.block_size, &device)?;
 
         Ok(Self {
+            model_file: options.model_file.clone(),
             c: Var::rand(0f32, 1f32, (VOCAB_SIZE, options.embedding_size), &device)?,
             // The gain (max value) is discussed in the "Delving Deep into Rectifier" paper by Kaiming He.
             // gain: (5/3) * sqrt(embedding_size * block_size).
@@ -175,6 +183,45 @@ impl Model {
         Ok(())
     }
 
+    pub fn load(&mut self) -> Result<(), VibeError> {
+        let path = Path::new(&self.model_file);
+
+        if path.exists() {
+            let model = safetensors::load(self.model_file.clone(), &self.device)?;
+
+            if let Some(parameter) = model.get("c") {
+                self.c = Var::from_tensor(parameter)?;
+            }
+            if let Some(parameter) = model.get("weights_1") {
+                self.weights_1 = Var::from_tensor(parameter)?;
+            }
+            if let Some(parameter) = model.get("biases_1") {
+                self.biases_1 = Var::from_tensor(parameter)?;
+            }
+            if let Some(parameter) = model.get("weights_2") {
+                self.weights_2 = Var::from_tensor(parameter)?;
+            }
+            if let Some(parameter) = model.get("biases_2") {
+                self.biases_2 = Var::from_tensor(parameter)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn save(&mut self) -> Result<(), VibeError> {
+        let mut tensors: HashMap<&str, Tensor> = HashMap::new();
+        tensors.insert("c", self.c.as_tensor().clone());
+        tensors.insert("weights_1", self.weights_1.as_tensor().clone());
+        tensors.insert("biases_1", self.biases_1.as_tensor().clone());
+        tensors.insert("weights_2", self.weights_2.as_tensor().clone());
+        tensors.insert("biases_2", self.biases_2.as_tensor().clone());
+
+        safetensors::save(&tensors, self.model_file.clone())?;
+
+        Ok(())
+    }
+
     // Training rounds.
     //
     // NOTE: the data is randomly batched every training round and all weights adjusted based on
@@ -226,6 +273,7 @@ impl Model {
 // Main event loop for the model thread.
 pub fn run_model(commands: Receiver<ModelCommandMessage>, results: Sender<AppMessage>, options: &Options) -> Result<(), VibeError> {
     let mut model = Model::init(options)?;
+    model.load()?;
 
     loop {
         match commands.recv() {
@@ -239,6 +287,10 @@ pub fn run_model(commands: Receiver<ModelCommandMessage>, results: Sender<AppMes
                 model.generate(count, &results).unwrap_or_else(|err| {
                     _ = results.send(AppMessage::Model(ModelResultMessage::Error { err: err }));
                 });
+            }
+
+            Ok(ModelCommandMessage::Save) => {
+                model.save()?;
             }
 
             Ok(ModelCommandMessage::Shutdown) => {
