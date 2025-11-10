@@ -126,7 +126,6 @@ impl App {
                     if self.state == State::Main {
                         self.model_commands.send(ModelCommandMessage::Train {
                             iterations: self.options.iterations,
-                            data_path: self.options.data.clone(),
                             start: self.loss_data.last().unwrap_or(&(0., 0.)).0 as usize,
                         })?;
                         self.state = State::Training;

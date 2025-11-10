@@ -21,14 +21,8 @@ pub enum ModelResultMessage {
 // Message types for sending commands to the model.
 #[derive(Debug)]
 pub enum ModelCommandMessage {
-    Train {
-        iterations: usize,
-        data_path: String,
-        start: usize,
-    },
-    Generate {
-        count: usize,
-    },
+    Train { iterations: usize, start: usize },
+    Generate { count: usize },
     Shutdown,
 }
 

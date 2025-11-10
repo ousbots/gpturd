@@ -4,7 +4,10 @@ use crate::{
         message::{AppMessage, LossType, ModelCommandMessage, ModelResultMessage},
         options::Options,
     },
-    data::{convert, parse},
+    data::{
+        convert,
+        parse::{self, Data},
+    },
     error::VibeError,
 };
 
@@ -25,6 +28,7 @@ pub struct Model {
     weights_2: Var,
     biases_2: Var,
     hyperparameters: Hyperparameters,
+    training_data: Data,
 }
 
 #[derive(Clone)]
@@ -39,6 +43,9 @@ pub struct Hyperparameters {
 impl Model {
     pub fn init(options: &Options) -> Result<Self, VibeError> {
         let device = device::open_device(&options.device)?;
+
+        // Tokenize the training data.
+        let data = parse::training_data(&options.data, options.block_size, &device)?;
 
         Ok(Self {
             c: Var::rand(0f32, 1f32, (VOCAB_SIZE, options.embedding_size), &device)?,
@@ -60,6 +67,7 @@ impl Model {
                 _hidden_size: options.hidden_size,
                 learn_rate: options.learn_rate,
             },
+            training_data: data,
             device: device,
         })
     }
@@ -173,17 +181,19 @@ impl Model {
     // the batch loss. This speeds up training by not having to calculate the entire gradient every
     // round. In the tradeoff between calculating the exact gradient every round versus running
     // more rounds, running more rounds shows better results.
-    pub fn train(&mut self, iterations: usize, start: usize, data_path: String, sender: &Sender<AppMessage>) -> Result<(), VibeError> {
-        // Tokenize the training data.
-        let data = parse::training_data(&data_path, self.hyperparameters.block_size, &self.device)?;
-
+    pub fn train(&mut self, iterations: usize, start: usize, sender: &Sender<AppMessage>) -> Result<(), VibeError> {
         for count in start..start + iterations {
-            let batch_indices = Tensor::rand(0f32, data.input.dims()[0] as f32, (self.hyperparameters.batch_size,), &self.device)?
-                .to_dtype(candle_core::DType::U32)?;
+            let batch_indices = Tensor::rand(
+                0f32,
+                self.training_data.input.dims()[0] as f32,
+                (self.hyperparameters.batch_size,),
+                &self.device,
+            )?
+            .to_dtype(candle_core::DType::U32)?;
 
             let loss = self.forward_pass(
-                &data.input.index_select(&batch_indices.flatten_all()?, 0)?,
-                &data.target.index_select(&batch_indices.flatten_all()?, 0)?,
+                &self.training_data.input.index_select(&batch_indices.flatten_all()?, 0)?,
+                &self.training_data.target.index_select(&batch_indices.flatten_all()?, 0)?,
             )?;
 
             self.backpropagate(&loss)?;
@@ -198,7 +208,7 @@ impl Model {
 
             // Send validation progress every few iterations.
             if count % (iterations / 10) == 0 {
-                let validation_loss = self.forward_pass(&data.validation_input, &data.validation_target)?;
+                let validation_loss = self.forward_pass(&self.training_data.validation_input, &self.training_data.validation_target)?;
                 sender.send(AppMessage::Model(ModelResultMessage::Progress {
                     loss_type: LossType::Validation,
                     iteration: count,
@@ -219,12 +229,8 @@ pub fn run_model(commands: Receiver<ModelCommandMessage>, results: Sender<AppMes
 
     loop {
         match commands.recv() {
-            Ok(ModelCommandMessage::Train {
-                iterations,
-                data_path,
-                start,
-            }) => {
-                model.train(iterations, start, data_path, &results).unwrap_or_else(|err| {
+            Ok(ModelCommandMessage::Train { iterations, start }) => {
+                model.train(iterations, start, &results).unwrap_or_else(|err| {
                     _ = results.send(AppMessage::Model(ModelResultMessage::Error { err: err }));
                 });
             }
