@@ -80,14 +80,34 @@ pub fn draw(
         ]),
     ];
 
+    let keybinding_lines: Vec<Line> = vec![
+        Line::from(vec![
+            Span::raw("t -> "),
+            Span::styled("train", Style::default().fg(Color::LightGreen).bold()),
+        ]),
+        Line::from(vec![
+            Span::raw("v -> "),
+            Span::styled("vibe strings", Style::default().fg(Color::LightGreen).bold()),
+        ]),
+        Line::from(vec![
+            Span::raw("p -> "),
+            Span::styled("show vibes", Style::default().fg(Color::LightGreen).bold()),
+        ]),
+        Line::from(vec![
+            Span::raw("q -> "),
+            Span::styled("quit", Style::default().fg(Color::Red).bold()),
+        ]),
+    ];
+
     let config_layout = Layout::vertical([Constraint::Length(8), Constraint::Fill(1)]).spacing(Spacing::Space(1));
     let [logo_area, lower_config_area] = config_area.layout(&config_layout);
 
     let options_layout = Layout::vertical(Constraint::from_lengths([
         options_lines.len() as u16 + 2,
         parameters_lines.len() as u16 + 2,
+        keybinding_lines.len() as u16 + 2,
     ]));
-    let [options_area, parameters_area] = lower_config_area.layout(&options_layout);
+    let [options_area, parameters_area, keybinding_area] = lower_config_area.layout(&options_layout);
 
     logo::render(frame, logo_area);
 
@@ -106,6 +126,14 @@ pub fn draw(
         .title("Model Hyperparameters");
 
     frame.render_widget(Paragraph::new(parameters_lines).block(parameters_block), parameters_area);
+
+    let keybinding_block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Palette::BORDER_COLOR)
+        .padding(Padding::horizontal(1))
+        .title("Keybindings");
+
+    frame.render_widget(Paragraph::new(keybinding_lines).block(keybinding_block), keybinding_area);
 
     render_loss(frame, model_area, options, loss_data, validation_loss_data);
 

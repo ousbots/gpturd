@@ -235,7 +235,7 @@ pub fn run_model(commands: Receiver<ModelCommandMessage>, results: Sender<AppMes
                 });
             }
 
-            Ok(ModelCommandMessage::Generate { count }) => {
+            Ok(ModelCommandMessage::Vibe { count }) => {
                 model.generate(count, &results).unwrap_or_else(|err| {
                     _ = results.send(AppMessage::Model(ModelResultMessage::Error { err: err }));
                 });

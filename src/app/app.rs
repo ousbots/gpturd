@@ -132,9 +132,9 @@ impl App {
                     }
                 }
 
-                KeyCode::Char('g') => {
+                KeyCode::Char('v') => {
                     if self.state == State::Main {
-                        self.model_commands.send(ModelCommandMessage::Generate {
+                        self.model_commands.send(ModelCommandMessage::Vibe {
                             count: self.options.generate,
                         })?;
                         self.state = State::Generate;

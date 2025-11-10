@@ -19,7 +19,7 @@ pub fn draw(frame: &mut Frame, generated: &Vec<String>) {
         .border_style(Palette::BORDER_COLOR)
         .padding(Padding::horizontal(1))
         .style((Palette::FG_COLOR, Palette::BG_COLOR))
-        .title("Generated Text");
+        .title("Vibes");
 
     let lines: Vec<Line> = generated.iter().rev().map(|text| Line::from(vec![Span::raw(text)])).collect();
 

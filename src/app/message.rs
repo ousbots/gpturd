@@ -22,7 +22,7 @@ pub enum ModelResultMessage {
 #[derive(Debug)]
 pub enum ModelCommandMessage {
     Train { iterations: usize, start: usize },
-    Generate { count: usize },
+    Vibe { count: usize },
     Shutdown,
 }
 
