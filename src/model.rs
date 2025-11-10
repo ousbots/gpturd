@@ -197,7 +197,7 @@ impl Model {
             }));
 
             // Send validation progress every few iterations.
-            if count % 100 == 0 {
+            if count % (iterations / 10) == 0 {
                 let validation_loss = self.forward_pass(&data.validation_input, &data.validation_target)?;
                 sender.send(AppMessage::Model(ModelResultMessage::Progress {
                     loss_type: LossType::Validation,

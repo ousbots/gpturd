@@ -130,7 +130,9 @@ fn render_loss(frame: &mut Frame, area: Rect, options: &Options, loss_data: &[(f
     } else {
         options.iterations as f64
     };
-    let max_y = 10.;
+
+    let max_y = 4.;
+    let min_y = 2.;
 
     let datasets = vec![
         Dataset::default()
@@ -141,14 +143,14 @@ fn render_loss(frame: &mut Frame, area: Rect, options: &Options, loss_data: &[(f
             .data(&training_data),
         Dataset::default()
             .name("Validation Loss")
-            .marker(Marker::Braille)
+            .marker(Marker::Dot)
             .graph_type(GraphType::Scatter)
             .style(Palette::VALIDATION_LOSS_COLOR)
             .data(&validation_data),
     ];
 
     let x_labels = vec!["0".to_string(), max_x.to_string()];
-    let y_labels = vec!["0".to_string(), "5".to_string(), max_y.to_string()];
+    let y_labels = vec![min_y.to_string(), max_y.to_string()];
 
     let chart = Chart::new(datasets)
         .style(Style::default().fg(Palette::FG_COLOR).bg(Palette::BG_COLOR))

@@ -3,12 +3,12 @@ use ratatui::style::Color;
 pub struct Palette {}
 
 impl Palette {
-    pub const FG_COLOR: Color = Color::Rgb(246, 214, 187); // #F6D6BB
-    pub const BG_COLOR: Color = Color::Rgb(20, 20, 50); // #141432
-    pub const BORDER_COLOR: Color = Color::Rgb(255, 255, 160); // #FFFFA0
+    pub const FG_COLOR: Color = Color::Rgb(253, 255, 182); // #FDFFB6
+    pub const BG_COLOR: Color = Color::Rgb(30, 30, 46); // #1E1E2E
+    pub const BORDER_COLOR: Color = Color::Rgb(255, 214, 165); // #FFD6A5
 
-    pub const TRAINING_LOSS_COLOR: Color = Color::Rgb(156, 227, 114);
-    pub const VALIDATION_LOSS_COLOR: Color = Color::Rgb(114, 214, 250);
+    pub const TRAINING_LOSS_COLOR: Color = Color::Rgb(202, 255, 191); // #CAFFBF
+    pub const VALIDATION_LOSS_COLOR: Color = Color::Rgb(189, 178, 255); // #BDB2FF
 }
 
 pub enum Rainbow {
