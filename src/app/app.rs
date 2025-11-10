@@ -188,12 +188,13 @@ impl App {
     }
 
     // App state machine.
-    pub fn run(&mut self) -> Result<(), VibeError> {
+    pub fn run(mut self) -> Result<(), VibeError> {
         enable_raw_mode()?;
         execute!(self.terminal.backend_mut(), EnterAlternateScreen)?;
 
         loop {
             if self.state == State::Exit {
+                _ = self.model_thread.join();
                 break;
             }
 
