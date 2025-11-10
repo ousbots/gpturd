@@ -17,7 +17,7 @@ pub fn draw(
     loss_data: &Vec<(f64, f64)>,
     validation_loss_data: &Vec<(f64, f64)>,
     generated: &Vec<String>,
-    show_generate: bool,
+    show_generated: bool,
 ) {
     let area = frame.area();
 
@@ -95,7 +95,10 @@ pub fn draw(
         ]),
         Line::from(vec![
             Span::raw("p -> "),
-            Span::styled("show vibes", Style::default().fg(Color::LightGreen).bold()),
+            Span::styled(
+                if show_generated { "hide vibes" } else { "show vibes" },
+                Style::default().fg(Color::LightGreen).bold(),
+            ),
         ]),
         Line::from(vec![
             Span::raw("s -> "),
@@ -145,7 +148,7 @@ pub fn draw(
 
     render_loss(frame, model_area, options, loss_data, validation_loss_data);
 
-    if show_generate {
+    if show_generated {
         generate_popup::draw(frame, generated);
     }
 }
